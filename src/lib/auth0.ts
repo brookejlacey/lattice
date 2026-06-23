@@ -14,9 +14,9 @@ export const auth0 = new Proxy({} as Auth0Client, {
         },
       });
     }
-    const value = (_auth0 as any)[prop];
+    const value = _auth0[prop as keyof Auth0Client];
     if (typeof value === "function") {
-      return value.bind(_auth0);
+      return (value as (...args: unknown[]) => unknown).bind(_auth0);
     }
     return value;
   },

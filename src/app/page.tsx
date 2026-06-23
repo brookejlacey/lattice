@@ -85,7 +85,7 @@ export default function Home() {
 
           <p className="mx-auto max-w-2xl text-lg leading-relaxed text-zinc-400">
             LATTICE is an autonomous AI agent that starts with zero connections.
-            Give it a goal — it discovers what services it needs, acquires
+            Give it a goal - it discovers what services it needs, acquires
             authenticated access through Auth0 Token Vault in real-time, and
             builds an expanding identity graph as it works.
           </p>
@@ -165,30 +165,30 @@ export default function Home() {
             Powered by Auth0 Token Vault
           </h2>
           <p className="mb-16 text-center text-zinc-500 max-w-2xl mx-auto">
-            Every feature of Token Vault working together — not as configuration, but as emergent runtime behavior.
+            Every feature of Token Vault working together - not as configuration, but as emergent runtime behavior.
           </p>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
-                title: "Async Auth",
-                desc: "Agent requests access while you're away. Approve from any device.",
+                title: "Runtime Acquisition",
+                desc: "Tokens are requested the moment a service is needed, never pre-configured up front.",
                 icon: "⟳",
               },
               {
-                title: "Step-Up Auth",
-                desc: "Sensitive actions trigger elevated consent. Permissions escalate, then revoke.",
+                title: "Consent-Driven",
+                desc: "Each new connection is approved by you through Token Vault before the agent proceeds.",
+                icon: "◈",
+              },
+              {
+                title: "Federated Exchange",
+                desc: "Your session token is exchanged for a scoped, per-service access token.",
                 icon: "↑",
               },
               {
-                title: "Token Lifecycle",
-                desc: "Tokens acquired, used, refreshed, and revoked — all visible in real-time.",
+                title: "Live Identity Graph",
+                desc: "Every edge on the lattice reflects a real token the agent acquired and used.",
                 icon: "◎",
-              },
-              {
-                title: "Consent Delegation",
-                desc: "You control what each connection can do. The agent operates within your boundaries.",
-                icon: "◈",
               },
             ].map((item) => (
               <div
