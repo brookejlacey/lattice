@@ -3,6 +3,49 @@ import { z } from "zod";
 import { withGitHub } from "@/lib/auth0-ai";
 import { getAccessTokenFromTokenVault } from "@auth0/ai-vercel";
 
+// Minimal shapes for the slices of the GitHub REST responses we read.
+interface GitHubRepo {
+  full_name: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  updated_at: string;
+  html_url: string;
+  open_issues_count: number;
+}
+interface GitHubLabel {
+  name: string;
+}
+interface GitHubIssue {
+  number: number;
+  title: string;
+  state: string;
+  user?: { login: string };
+  labels?: GitHubLabel[];
+  created_at: string;
+  body?: string;
+}
+interface GitHubPull {
+  number: number;
+  title: string;
+  state: string;
+  user?: { login: string };
+  head?: { ref: string };
+  mergeable: boolean | null;
+  created_at: string;
+  html_url: string;
+}
+interface GitHubWorkflowRun {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  head_branch: string;
+  event: string;
+  created_at: string;
+  html_url: string;
+}
+
 export const listRepositories = withGitHub(
   tool({
     description:
@@ -25,8 +68,8 @@ export const listRepositories = withGitHub(
           },
         }
       );
-      const repos = await res.json();
-      return repos.map((r: any) => ({
+      const repos: GitHubRepo[] = await res.json();
+      return repos.map((r) => ({
         name: r.full_name,
         description: r.description,
         language: r.language,
@@ -60,13 +103,13 @@ export const getRepoIssues = withGitHub(
           },
         }
       );
-      const issues = await res.json();
-      return issues.map((i: any) => ({
+      const issues: GitHubIssue[] = await res.json();
+      return issues.map((i) => ({
         number: i.number,
         title: i.title,
         state: i.state,
         author: i.user?.login,
-        labels: i.labels?.map((l: any) => l.name),
+        labels: i.labels?.map((l) => l.name),
         created: i.created_at,
         body: i.body?.slice(0, 300),
       }));
@@ -95,8 +138,8 @@ export const getRepoPullRequests = withGitHub(
           },
         }
       );
-      const prs = await res.json();
-      return prs.map((p: any) => ({
+      const prs: GitHubPull[] = await res.json();
+      return prs.map((p) => ({
         number: p.number,
         title: p.title,
         state: p.state,
@@ -169,8 +212,8 @@ export const getWorkflowRuns = withGitHub(
           },
         }
       );
-      const data = await res.json();
-      return data.workflow_runs?.map((r: any) => ({
+      const data: { workflow_runs?: GitHubWorkflowRun[] } = await res.json();
+      return data.workflow_runs?.map((r) => ({
         id: r.id,
         name: r.name,
         status: r.status,

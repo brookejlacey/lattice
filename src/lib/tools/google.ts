@@ -3,6 +3,34 @@ import { z } from "zod";
 import { withGoogle } from "@/lib/auth0-ai";
 import { getAccessTokenFromTokenVault } from "@auth0/ai-vercel";
 
+// Minimal shapes for the slices of the Google API responses we read.
+interface CalendarEvent {
+  summary?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  location?: string;
+  attendees?: { email: string }[];
+  status?: string;
+  htmlLink?: string;
+}
+interface GmailHeader {
+  name: string;
+  value: string;
+}
+interface GmailMessage {
+  id: string;
+  snippet?: string;
+  payload?: { headers?: GmailHeader[] };
+}
+interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime: string;
+  webViewLink: string;
+  owners?: { displayName: string }[];
+}
+
 export const getCalendarEvents = withGoogle(
   tool({
     description:
@@ -23,13 +51,13 @@ export const getCalendarEvents = withGoogle(
           headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
-      const data = await res.json();
-      return (data.items || []).map((e: any) => ({
+      const data: { items?: CalendarEvent[] } = await res.json();
+      return (data.items || []).map((e) => ({
         summary: e.summary,
         start: e.start?.dateTime || e.start?.date,
         end: e.end?.dateTime || e.end?.date,
         location: e.location,
-        attendees: e.attendees?.map((a: any) => a.email),
+        attendees: e.attendees?.map((a) => a.email),
         status: e.status,
         link: e.htmlLink,
       }));
@@ -57,25 +85,25 @@ export const searchEmails = withGoogle(
           headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
-      const listData = await listRes.json();
+      const listData: { messages?: { id: string }[] } = await listRes.json();
       if (!listData.messages?.length)
         return { results: [], message: "No emails found" };
 
       const emails = await Promise.all(
-        listData.messages.slice(0, 5).map(async (msg: any) => {
+        listData.messages.slice(0, 5).map(async (msg) => {
           const res = await fetch(
             `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
             {
               headers: { Authorization: `Bearer ${accessToken}` },
             }
           );
-          const data = await res.json();
+          const data: GmailMessage = await res.json();
           const headers = data.payload?.headers || [];
           return {
             id: data.id,
-            subject: headers.find((h: any) => h.name === "Subject")?.value,
-            from: headers.find((h: any) => h.name === "From")?.value,
-            date: headers.find((h: any) => h.name === "Date")?.value,
+            subject: headers.find((h) => h.name === "Subject")?.value,
+            from: headers.find((h) => h.name === "From")?.value,
+            date: headers.find((h) => h.name === "Date")?.value,
             snippet: data.snippet,
           };
         })
@@ -103,8 +131,8 @@ export const listDriveFiles = withGoogle(
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const data = await res.json();
-      return (data.files || []).map((f: any) => ({
+      const data: { files?: DriveFile[] } = await res.json();
+      return (data.files || []).map((f) => ({
         name: f.name,
         type: f.mimeType,
         modified: f.modifiedTime,

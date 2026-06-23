@@ -1,125 +1,139 @@
-# LATTICE — Agent Identity Graph Protocol
+# LATTICE
 
-An autonomous AI agent that starts with **zero connections** and dynamically discovers, acquires, and orchestrates authenticated access to external services at runtime through **Auth0 Token Vault**.
+### Agent Identity Graph Protocol
 
-## The Concept
+An autonomous AI agent that starts with **zero connections** and acquires authenticated access to external services **at runtime**, building its identity graph as it works.
 
-Traditional AI agents are pre-configured with API keys and service connections. LATTICE flips this model: the agent starts with an empty identity graph and builds it in real-time as it works.
+<p align="center">
+  <img src="docs/lattice.svg" alt="The LATTICE identity graph growing from zero edges to three as the agent acquires tokens at runtime" width="100%" />
+</p>
 
-Give the agent a goal like _"Why did our deployment fail?"_ and watch it:
+---
 
-1. **Discover** it needs GitHub → requests Token Vault connection → user approves
-2. **Read** CI logs → realizes it needs monitoring data → requests that token
-3. **Correlate** with Slack conversations → requests Slack access
-4. **Act** — files an issue, pings the team, updates the tracker
+## The idea
 
-Each step dynamically acquires new identity edges. The agent's identity lattice grows as it works.
+Every other AI agent is handed its keys up front. You decide at configuration time which services it can touch, wire in the API keys, and ship it with a fixed set of powers.
 
-## Key Features
+LATTICE inverts that. The agent boots with an **empty identity graph**. You give it a goal. As it reasons about the goal it discovers which services it needs, and it asks for each one **the moment it needs it** through [Auth0 Token Vault](https://auth0.com/docs/secure/tokens/token-vault). You approve the connection, a federated token is minted into the vault, and a new edge appears on the lattice. The agent's identity is not provisioned. It is *grown*.
 
-- **Dynamic Token Acquisition** — Agent discovers needed services at runtime, not configuration time
-- **Real-Time Identity Graph** — Live canvas visualization of the expanding token lattice
-- **Token Lifecycle Tracking** — Watch tokens being minted, used, refreshed, and revoked
-- **Multi-Service Chaining** — Agent crosses service boundaries to complete complex goals
-- **Consent-Driven** — Users approve each new connection; agent operates within granted boundaries
+Give it _"Why did our deployment fail?"_ and watch it:
 
-## Token Vault Features Demonstrated
+1. Reach for **GitHub** to read the CI run, hit a missing connection, and ask you to approve it
+2. Use the freshly minted token to pull the failing workflow
+3. Reach for **Slack** to correlate with the team's discussion, and acquire that edge too
+4. Cross-reference and report back
 
-| Feature | How LATTICE Uses It |
-|---------|-------------------|
-| **OAuth Token Exchange** | Every service connection uses Token Vault's federated token exchange |
-| **Async Authentication** | Agent requests access; user approves when ready |
-| **Consent Delegation** | Each connection is scoped — user controls what the agent can do |
-| **Token Lifecycle** | Tokens acquired, cached, refreshed, and displayed in real-time |
+Each step adds an authenticated edge. The graph on the right of the screen is drawn from the agent's **actual** token lifecycle, not a script.
 
-## Supported Services
+## How it actually works
 
-- **GitHub** — Repos, issues, PRs, CI/CD workflows
-- **Google Calendar** — Events, availability, scheduling
-- **Gmail** — Email search, communications context
-- **Google Drive** — Documents, spreadsheets, shared files
-- **Slack** — Channels, messages, team communications
+The novel part is the runtime acquisition loop. There is no pre-flight "connect your accounts" screen. The agent tries a tool, and a missing token *is* the trigger for consent.
 
-## Tech Stack
+```mermaid
+sequenceDiagram
+    participant U as You
+    participant A as LATTICE agent
+    participant TV as Auth0 Token Vault
+    participant S as Service (GitHub / Google / Slack)
 
-- **Next.js 16** — App router, server components
-- **Auth0 Token Vault** (`@auth0/ai`, `@auth0/ai-vercel`) — Identity layer
-- **Vercel AI SDK** — Streaming chat with tool calling
-- **OpenAI GPT-4o** — Agent reasoning
-- **Framer Motion** — UI animations
-- **Canvas API** — Real-time identity graph visualization
+    U->>A: "Investigate the failed deploy"
+    A->>TV: call GitHub tool - fetch a federated token
+    TV-->>A: no connection yet → TokenVaultInterrupt
+    A-->>U: "I need access to GitHub" (consent card)
+    U->>TV: approve connection
+    TV-->>A: federated access token (minted)
+    A->>S: call the GitHub API with the token
+    S-->>A: workflow run data
+    Note over A: new edge added to the identity graph
+    A->>TV: call Slack tool - fetch a federated token
+    TV-->>A: interrupt → consent → token
+    A->>S: read the relevant Slack channel
+    A-->>U: correlated answer + grown lattice
+```
 
-## Setup
+Concretely:
+
+- Each tool is wrapped with a Token Vault authorizer (`withTokenVault`). On execution it exchanges the user's refresh token for a **federated connection access token** scoped to that service.
+- If no connection exists (or scopes are missing), the authorizer raises a `TokenVaultInterrupt` instead of failing. The server streams it to the client via the AI SDK's interrupt channel.
+- The client (`useInterruptions`) turns that interrupt into a **consent card**. Approving it opens the Auth0 connection flow; on return the interrupted tool call resumes with the token now in hand.
+- The identity graph and token-lifecycle panel are derived entirely from real message and interrupt state. A service node goes `idle → acquiring → connecting (awaiting consent) → active` based on the agent's actual tool calls.
+
+## Supported services
+
+| Service | Tools |
+|---------|-------|
+| **GitHub** | repos, issues, pull requests, Actions workflow runs, create issue |
+| **Google** | Calendar events, Gmail search, Drive files |
+| **Slack** | list channels, read history, post message |
+
+Adding a service is two steps: register a `withTokenVault` authorizer for the connection, and write the tools that use `getAccessTokenFromTokenVault()`.
+
+## Tech stack
+
+- **Next.js 16** (App Router, Turbopack)
+- **Auth0 Token Vault** via `@auth0/ai` and `@auth0/ai-vercel` for federated token exchange and interrupts
+- **Vercel AI SDK** (`ai` + `@ai-sdk/react`) for streaming tool-calling
+- **OpenAI gpt-4o** for agent reasoning
+- **Canvas + Framer Motion** for the live identity graph
+
+## Run it
 
 ### Prerequisites
 
-- Node.js 18+
-- Auth0 account with Token Vault enabled
-- OpenAI API key
-- Social connections configured in Auth0 (GitHub, Google, Slack)
+- Node.js 20+
+- An Auth0 tenant with **Token Vault** enabled
+- An OpenAI API key
+- Social connections configured in Auth0: GitHub, Google, Slack
 
-### Environment Variables
+### 1. Configure
 
-```env
-AUTH0_DOMAIN=your-tenant.auth0.com
-AUTH0_CLIENT_ID=your-client-id
-AUTH0_CLIENT_SECRET=your-client-secret
-AUTH0_SECRET=a-random-32-byte-hex-string
-APP_BASE_URL=http://localhost:3000
-OPENAI_API_KEY=your-openai-key
+```bash
+cp .env.example .env.local
 ```
 
-### Auth0 Configuration
+Fill in the values. `AUTH0_SECRET` is any 32-byte hex string (`openssl rand -hex 32`).
 
-1. Create a Regular Web Application in Auth0
-2. Enable Token Vault in your Auth0 tenant
-3. Configure social connections:
-   - **GitHub** — Enable with `repo`, `read:user`, `read:org` scopes
-   - **Google** — Enable with Calendar, Gmail, Drive scopes
-   - **Slack** — Enable with `channels:read`, `channels:history`, `chat:write` scopes
-4. Set callback URLs:
+### 2. Auth0 setup
+
+1. Create a **Regular Web Application** and enable **Token Vault** on the tenant.
+2. Enable the social connections you want the agent to reach, with the scopes the tools request:
+   - **GitHub** - `repo`, `read:user`, `read:org`
+   - **Google** - Calendar, Gmail, Drive read-only scopes
+   - **Slack** - `channels:read`, `channels:history`, `users:read`, `chat:write`
+3. Set the callback and logout URLs:
    - Allowed Callback URLs: `http://localhost:3000/auth/callback`
    - Allowed Logout URLs: `http://localhost:3000`
 
-### Run
+### 3. Start
 
 ```bash
 npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000` and click **Launch Agent**.
+Open `http://localhost:3000`, click **Launch Agent**, and give it a goal. The first time it reaches for a service you will see the consent card; approve it and watch the edge light up.
+
+## Demo
+
+> Recording of a live run (zero edges to a full lattice across GitHub, Google, and Slack) goes here. Capture it against your own tenant: start a mission like _"Investigate my deployment status and check Slack for related discussion,"_ approve each connection as it is requested, and screen-record the graph filling in.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│                  Browser                     │
-│  ┌──────────────────┐  ┌──────────────────┐ │
-│  │   Chat Interface  │  │ Identity Graph   │ │
-│  │   (React + AI SDK)│  │ (Canvas + Motion)│ │
-│  └────────┬─────────┘  └──────────────────┘ │
-└───────────┼─────────────────────────────────┘
-            │
-┌───────────┼─────────────────────────────────┐
-│           │        Next.js Server            │
-│  ┌────────▼─────────┐                       │
-│  │  /api/chat        │                       │
-│  │  (Stream + Tools) │                       │
-│  └────────┬─────────┘                       │
-│           │                                  │
-│  ┌────────▼─────────────────────────────┐   │
-│  │  Auth0 Token Vault Authorizers        │   │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐   │   │
-│  │  │ GitHub │ │ Google │ │ Slack  │   │   │
-│  │  └───┬────┘ └───┬────┘ └───┬────┘   │   │
-│  └──────┼──────────┼──────────┼─────────┘   │
-└─────────┼──────────┼──────────┼─────────────┘
-          │          │          │
-    ┌─────▼──┐ ┌────▼───┐ ┌──▼─────┐
-    │ GitHub │ │ Google │ │ Slack  │
-    │  API   │ │  APIs  │ │  API   │
-    └────────┘ └────────┘ └────────┘
+Browser
+  Chat (React + AI SDK)   Identity Graph (Canvas + Motion)
+        │                          ▲
+        │  prompt / interrupts     │ real tool + interrupt state
+        ▼                          │
+Next.js server
+  /api/chat  ──>  streamText + tools (withInterruptions)
+        │
+  Token Vault authorizers:  GitHub   Google   Slack
+        │                     │        │        │
+        └── federated token exchange ──┴────────┘
+                              ▼        ▼        ▼
+                          GitHub    Google    Slack
+                            API      APIs      API
 ```
 
 ## License

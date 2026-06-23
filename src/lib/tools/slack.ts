@@ -3,6 +3,26 @@ import { z } from "zod";
 import { withSlack } from "@/lib/auth0-ai";
 import { getAccessTokenFromTokenVault } from "@auth0/ai-vercel";
 
+// Minimal shapes for the slices of the Slack Web API responses we read.
+interface SlackChannel {
+  id: string;
+  name: string;
+  topic?: { value: string };
+  purpose?: { value: string };
+  num_members?: number;
+}
+interface SlackReaction {
+  name: string;
+  count: number;
+}
+interface SlackMessage {
+  user?: string;
+  text?: string;
+  ts?: string;
+  type?: string;
+  reactions?: SlackReaction[];
+}
+
 export const listSlackChannels = withSlack(
   tool({
     description:
@@ -18,8 +38,8 @@ export const listSlackChannels = withSlack(
           headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
-      const data = await res.json();
-      return (data.channels || []).map((c: any) => ({
+      const data: { channels?: SlackChannel[] } = await res.json();
+      return (data.channels || []).map((c) => ({
         id: c.id,
         name: c.name,
         topic: c.topic?.value,
@@ -46,13 +66,13 @@ export const getSlackMessages = withSlack(
           headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
-      const data = await res.json();
-      return (data.messages || []).map((m: any) => ({
+      const data: { messages?: SlackMessage[] } = await res.json();
+      return (data.messages || []).map((m) => ({
         user: m.user,
         text: m.text,
         timestamp: m.ts,
         type: m.type,
-        reactions: m.reactions?.map((r: any) => `${r.name}:${r.count}`),
+        reactions: m.reactions?.map((r) => `${r.name}:${r.count}`),
       }));
     },
   })

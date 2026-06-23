@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LATTICE — Agent Identity Graph Protocol",
+  title: "LATTICE - Agent Identity Graph Protocol",
   description:
     "An autonomous AI agent that dynamically discovers and acquires authenticated access to external services at runtime through Auth0 Token Vault.",
 };
